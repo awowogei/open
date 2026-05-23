@@ -1,0 +1,98 @@
+_open_completions() {
+    local cur prev opts cache_dir
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="-a --application -w --with -m --mimetype"
+    cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/open"
+
+    # Helper: Check if flag is present on the command line
+    _has_flag() {
+        local flag
+        for flag in "${COMP_WORDS[@]}"; do
+            [[ "$flag" == "$1" || "$flag" == "$2" ]] && return 0
+        done
+        return 1
+    }
+
+    # Optimized Helper: Get MimeTypes with Caching
+    _get_mimetypes() {
+        local source_file="/etc/mime.types"
+        local cache_file="$cache_dir/mime.cache"
+        
+        [[ ! -f "$source_file" ]] && return
+
+        # Rebuild if cache is missing OR source is newer than cache
+        if [[ ! -f "$cache_file" || "$source_file" -nt "$cache_file" ]]; then
+            mkdir -p "$cache_dir"
+            # Extract 1st column, skip comments/empty lines, save to cache
+            awk '!/^#/ && NF {print $1}' "$source_file" > "$cache_file" 2>/dev/null
+        fi
+        cat "$cache_file"
+    }
+
+    # Optimized Helper: Get Desktop Entry Stems with Caching
+    _get_desktop_stems() {
+        local cache_file="$cache_dir/apps.cache"
+        local dirs=("/usr/share/applications" "/usr/local/share/applications" "${XDG_DATA_HOME:-$HOME/.local/share}/applications")
+        
+        local rebuild=0
+        [[ ! -f "$cache_file" ]] && rebuild=1
+        for d in "${dirs[@]}"; do
+            [[ -d "$d" && "$d" -nt "$cache_file" ]] && rebuild=1 && break
+        done
+
+        if [[ "$rebuild" -eq 1 ]]; then
+            mkdir -p "$cache_dir"
+            local stems=""
+            for d in "${dirs[@]}"; do
+                [[ ! -d "$d" ]] && continue
+                # Use find for faster globbing and NoDisplay filtering
+                while read -r f; do
+                    # Manual check for NoDisplay inside file
+                    if ! grep -q "NoDisplay=true" "$f"; then
+                        stems+="$(basename "$f" .desktop) "
+                    fi
+                done < <(find "$d" -maxdepth 1 -name "*.desktop")
+            done
+            echo "$stems" > "$cache_file"
+        fi
+        cat "$cache_file"
+    }
+
+    # Main Completion Logic
+    case "$prev" in
+        -a|--application)
+            COMPREPLY=( $(compgen -f -- "$cur") $(compgen -W "$(_get_mimetypes)" -- "$cur") )
+            return 0
+            ;;
+        -m|--mimetype)
+            COMPREPLY=( $(compgen -f -- "$cur") )
+            return 0
+            ;;
+        -w|--with)
+            COMPREPLY=( $(compgen -W "$(_get_desktop_stems)" -- "$cur") )
+            return 0
+            ;;
+    esac
+
+    # Flag Completion (Conflict Logic)
+    if [[ "$cur" == -* ]]; then
+        if _has_flag "-a" "--application" || _has_flag "-w" "--with" || _has_flag "-m" "--mimetype"; then
+            COMPREPLY=()
+        else
+            COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+        fi
+        return 0
+    fi
+
+    # Free Arguments Logic
+    if _has_flag "-a" "--application" || _has_flag "-w" "--with"; then
+        COMPREPLY=( $(compgen -f -- "$cur") $(compgen -W "$(_get_mimetypes)" -- "$cur") )
+    else
+        # This handles both -m case and the "no flag" case
+        COMPREPLY=( $(compgen -f -- "$cur") )
+    fi
+}
+
+complete -F _open_completions open

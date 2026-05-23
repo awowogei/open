@@ -1,0 +1,92 @@
+#compdef open
+
+_open_name() {
+    autoload -Uz _arguments _describe _files _alternative _mime_types _store_cache _retrieve_cache
+
+    local -a conflicts=( '(-a --application -w --with -m --mimetype)' )
+    local cache_id="open_stems"
+    local -a dirs=( 
+        "${XDG_DATA_HOME:-$HOME/.local/share}/applications" 
+        "/usr/share/applications" 
+        "/usr/local/share/applications" 
+    )
+
+    # 1. Setup Cache Path
+    zstyle -t ":completion:${curcontext}:*" use-cache || zstyle ":completion:${curcontext}:*" use-cache on
+    local user_cache_path
+    zstyle -s ":completion:${curcontext}:*" cache-path user_cache_path
+    : ${user_cache_path:=$HOME/.zcompcache}
+    [[ ! -d "$user_cache_path" ]] && mkdir -p "$user_cache_path"
+
+    # 2. Fast Cache Validation (Check directory timestamps, not individual files)
+    local cache_file="$user_cache_path/$cache_id"
+    local needs_rebuild=0
+    [[ ! -f "$cache_file" ]] && needs_rebuild=1
+    for d in $dirs; do
+        [[ -d "$d" && "$d" -nt "$cache_file" ]] && needs_rebuild=1 && break
+    done
+
+    # 3. High-Speed Parsing (Uses Zsh built-ins, ZERO forks/external processes)
+    if (( needs_rebuild )) || ! _retrieve_cache "$cache_id"; then
+        local -A app_map
+        local f content line stem name
+        for d in $dirs; do
+            [[ -d "$d" ]] || continue
+            for f in "$d"/*.desktop(N); do
+                # Read file using built-in redirection to avoid 'cat'
+                content="$(<"$f")"
+                
+                # Built-in string matching (Faster than grep)
+                [[ "$content" == *"NoDisplay=true"* ]] && continue
+                
+                stem="${f:t:r}"
+                name=""
+                # Faster line-by-line parsing with built-in iteration
+                while IFS= read -r line; do
+                    if [[ "$line" == Name=* ]]; then
+                        name="${line#Name=}"
+                        break
+                    fi
+                done <<< "$content"
+                
+                # Escape colons for _describe compatibility
+                app_map[$stem]="${stem//:/\\:}:${name:-$stem}"
+            done
+        done
+        desktop_entries_cache=("${app_map[@]}")
+        _store_cache "$cache_id" desktop_entries_cache
+    fi
+
+    # 4. Completion Definition
+    local context state state_descr line
+    local -A opt_args
+
+    _arguments -S \
+        $conflicts'(-a --application)'{-a,--application}'[Specify application]:target:->app_args' \
+        $conflicts'(-m --mimetype)'{-m,--mimetype}'[Specify mimetype]:file:_files' \
+        $conflicts'(-w --with)'{-w,--with}'[Specify desktop entry]:desktop entry:->desktop_args' \
+        '*:free arguments:->free_args'
+
+    case "$state" in
+        desktop_args)
+            if (( ${#desktop_entries_cache} > 0 )); then
+                _describe -t applications 'desktop entry' desktop_entries_cache
+            else
+                _message "no desktop entries found"
+            fi
+            ;;
+        app_args)
+            _alternative 'files:file path:_files' 'mimetypes:mime type:_mime_types'
+            ;;
+        free_args)
+            # Efficient opt_args check using keys
+            if [[ -n "${opt_args[-w]}" || -n "${opt_args[--with]}" || -n "${opt_args[-a]}" || -n "${opt_args[--application]}" ]]; then
+                _alternative 'files:file path:_files' 'mimetypes:mime type:_mime_types'
+            else
+                _files
+            fi
+            ;;
+    esac
+}
+
+_open_name "$@"

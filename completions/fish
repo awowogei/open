@@ -1,16 +1,4 @@
-# 1. Helper: Get MimeTypes (since Fish lacks _mime_types)
-function __fish_open_get_mimetypes
-    # Common locations for mime.types
-    for file in /etc/mime.types /usr/share/mime/types
-        if test -f $file
-            # Parse the first column, skip comments/empty lines
-            sed -e 's/#.*//' -e '/^[[:space:]]*$/d' $file | awk '{print $1}'
-            return
-        end
-    end
-end
-
-# 2. Helper: Get Desktop Entry Stems with Caching and Validation
+# Get Desktop Entry Stems + cache them
 function __fish_open_get_apps
     set -l cache_dir (set -q XDG_CACHE_HOME; and echo "$XDG_CACHE_HOME"; or echo "$HOME/.cache")/fish_open
     set -l cache_file "$cache_dir/apps.cache"
@@ -43,7 +31,7 @@ function __fish_open_get_apps
                     if not grep -q "NoDisplay=true" "$f"
                         set -l stem (string replace -r '\.desktop$' '' (basename "$f"))
                         set -l name (sed -n '/^Name=/ { s/^Name=//; p; q; }' "$f")
-                        set -l entry "$stem\t$name"
+                        set -l entry "$stem"\t"$name"
                         if not contains "$entry" $results
                             set -a results "$entry"
                         end
@@ -56,30 +44,45 @@ function __fish_open_get_apps
     end
 end
 
-# 3. Define Logic Variables
-set -l conflicts "-a --application -w --with -m --mimetype"
+# Prefers matching file paths. Only fall back to mimetypes when there
+# are no matching paths for the current token.
+function __fish_open_paths_or_mimes
+    set -l token (commandline -ct)
+    set -l paths (__fish_complete_path $token)
+    if test (count $paths) -gt 0
+        printf "%s\n" $paths
+    else
+        # Common locations for mime.types
+        for file in /etc/mime.types /usr/share/mime/types
+            if test -f $file
+                # Parse the first column, skip comments/empty lines
+                sed -e 's/#.*//' -e '/^[[:space:]]*$/d' $file | awk '{print $1}'
+                return
+            end
+        end
+    end
+end
 
-# 4. Command Completions
-# Disable file completion by default so we can control it via logic
+# XXX: The order here is detrimental to its function. The completions with
+# conditions exclude the same options from being suggested again.
+
+# Disable file completion by default so we can control it via logic.
 complete -c open -f
 
-# -a / --application: Files + MimeTypes
-complete -c open -s a -l application -n "not __fish_seen_argument -l application -l with -l mimetype -s a -s w -s m" -r -a "(__fish_complete_path)"
-complete -c open -s a -l application -n "not __fish_seen_argument -l application -l with -l mimetype -s a -s w -s m" -r -a "(__fish_open_get_mimetypes)"
-
-# -m / --mimetype: Files only
-complete -c open -s m -l mimetype -n "not __fish_seen_argument -l application -l with -l mimetype -s a -s w -s m" -r -a "(__fish_complete_path)"
-
-# -w / --with: Desktop Stems
-complete -c open -s w -l with -n "not __fish_seen_argument -l application -l with -l mimetype -s a -s w -s m" -r -a "(__fish_open_get_apps)"
-
-# 5. Free Argument Logic
-# If -w or -a seen: Files + MimeTypes
-complete -c open -n "__fish_seen_argument -s w -l with -s a -l application" -a "(__fish_complete_path)"
-complete -c open -n "__fish_seen_argument -s w -l with -s a -l application" -a "(__fish_open_get_mimetypes)"
-
-# If -m seen: Files only
+# Free arguments
+# After -w <app> or -a <input>, additional INPUTs are paths or mimetypes.
+complete -c open -n "__fish_seen_argument -s w -l with -s a -l application" -a "(__fish_open_paths_or_mimes)"
+# After -m <input>, additional INPUTs are paths only.
 complete -c open -n "__fish_seen_argument -s m -l mimetype" -a "(__fish_complete_path)"
 
-# Default: Files only
-complete -c open -n "not __fish_seen_argument $conflicts" -a "(__fish_complete_path)"
+# -a / --application: next token is a file path, or a mimetype as fallback
+complete -c open -o a -l application -r -a "(__fish_open_paths_or_mimes)"
+
+# -m / --mimetype: next token is a path
+complete -c open -o m -l mimetype -r -a "(__fish_complete_path)"
+
+# -w / --with: next token is a desktop entry
+complete -c open -o w -l with -r -a "(__fish_open_get_apps)"
+
+# Else, paths only.
+complete -c open -n "not __fish_seen_argument -a --application -w --with -m --mimetype" -a "(__fish_complete_path)"

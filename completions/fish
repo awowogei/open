@@ -1,8 +1,11 @@
+# fish completions for open
+
 # Get Desktop Entry Stems + cache them
 function __fish_open_get_apps
-    set -l cache_dir (set -q XDG_CACHE_HOME; and echo "$XDG_CACHE_HOME"; or echo "$HOME/.cache")/fish_open
-    set -l cache_file "$cache_dir/apps.cache"
-    set -l app_dirs "$HOME/.local/share/applications" "/usr/share/applications" "/usr/local/share/applications"
+    set -l cache_dir (set -q XDG_CACHE_HOME; and echo "$XDG_CACHE_HOME"; or echo "$HOME/.cache")/open
+    set -l cache_file "$cache_dir/apps-fish"
+    set -l data_home (set -q XDG_DATA_HOME; and echo "$XDG_DATA_HOME"; or echo "$HOME/.local/share")
+    set -l app_dirs "$data_home/applications" "/usr/share/applications" "/usr/local/share/applications"
     
     mkdir -p "$cache_dir"
 
@@ -44,21 +47,20 @@ function __fish_open_get_apps
     end
 end
 
-# Prefers matching file paths. Only fall back to mimetypes when there
-# are no matching paths for the current token.
+# Prefers matching file paths. Only falls back to mimetypes (from the first
+# available system mime list) when there are no matching paths for the token.
 function __fish_open_paths_or_mimes
     set -l token (commandline -ct)
     set -l paths (__fish_complete_path $token)
     if test (count $paths) -gt 0
         printf "%s\n" $paths
-    else
-        # Common locations for mime.types
-        for file in /etc/mime.types /usr/share/mime/types
-            if test -f $file
-                # Parse the first column, skip comments/empty lines
-                sed -e 's/#.*//' -e '/^[[:space:]]*$/d' $file | awk '{print $1}'
-                return
-            end
+        return
+    end
+    for f in /etc/mime.types /usr/share/mime/types
+        if test -f $f
+            # Print column 1 (the mimetype), skipping comments and blank lines.
+            awk '!/^#/ && NF {print $1}' $f
+            return
         end
     end
 end

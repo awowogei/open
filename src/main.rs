@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use std::{path::Path, process::ExitCode};
+use std::process::ExitCode;
 
 use open::desktop_entry::DesktopEntry;
 
@@ -28,19 +28,30 @@ struct Cli {
     command: Option<Hidden>,
 
     // A list of paths, urls or mimetypes
-    #[clap(required = true)]
+    #[clap(required = true, help = "Paths, urls or mime types")]
     inputs: Vec<String>,
 
     // Set the default application of the inputs, does not open them
-    #[arg(short = 'w', long, value_name = "APPLICATION", group = "flag")]
+    #[arg(
+        short = 'w',
+        long,
+        value_name = "APPLICATION",
+        group = "flag",
+        help = "Set default application"
+    )]
     with: Option<String>,
 
     // Get the default applications of the inputs
-    #[arg(short = 'a', long = "application", group = "flag")]
+    #[arg(
+        short = 'a',
+        long = "application",
+        group = "flag",
+        help = "Get default application"
+    )]
     get_application: bool,
 
     // Get the mimetypes of the inputs
-    #[arg(short = 'm', long = "mimetype", group = "flag")]
+    #[arg(short = 'm', long = "mimetype", group = "flag", help = "Get mimetype")]
     get_mime: bool,
 }
 
@@ -93,11 +104,8 @@ fn main() -> ExitCode {
                 Ok(d) => println!("{}", &d.name),
                 Err(e) => {
                     eprintln!(
-                        "{}",
-                        e.context(format!(
-                            "Could not load desktop entry at {}, error:",
-                            path.display()
-                        ))
+                        "{:?}",
+                        e.context(format!("Failed to find application for {}", path.display()))
                     );
                     return ExitCode::FAILURE;
                 }

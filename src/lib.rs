@@ -73,7 +73,7 @@ pub fn set_default(application: &str, mimetype: &Mime) {
         Ok(d) => d,
         Err(e) => {
             eprintln!(
-                "{}",
+                "{:?}",
                 e.context(format!(
                     "Could not set the default application for {mimetype} to {application}"
                 ))

@@ -182,8 +182,8 @@ impl DesktopEntry {
                 continue;
             };
 
-            if &desktop_entry.name == &desktop_entry.name.to_lowercase()
-                || desktop_entry.exec == name
+            if &name == &desktop_entry.name.to_lowercase()
+                || desktop_entry.executable() == Some(name)
             {
                 return DesktopEntry::load(path);
             }
@@ -359,7 +359,7 @@ fn get_terminal() -> Option<DesktopEntry> {
             Ok(d) => return Some(d),
             Err(e) => {
                 eprintln!(
-                    "{}",
+                    "{:?}",
                     e.context(format!(
                         "Could not load desktop entry at {}, error:",
                         path.display()

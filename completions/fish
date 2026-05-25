@@ -1,54 +1,15 @@
 # fish completions for open
 
-# Get Desktop Entry Stems + cache them
 function __fish_open_get_apps
-    set -l cache_dir (set -q XDG_CACHE_HOME; and echo "$XDG_CACHE_HOME"; or echo "$HOME/.cache")/open
-    set -l cache_file "$cache_dir/apps-fish"
-    set -l data_home (set -q XDG_DATA_HOME; and echo "$XDG_DATA_HOME"; or echo "$HOME/.local/share")
-    set -l app_dirs "$data_home/applications" "/usr/share/applications" "/usr/local/share/applications"
-    
-    mkdir -p "$cache_dir"
-
-    # Check if cache is valid (newer than all app directories)
-    set -l use_cache 1
-    if test -f "$cache_file"
-        for d in $app_dirs
-            if test -d "$d"; and test "$d" -nt "$cache_file"
-                set use_cache 0
-                break
-            end
-        end
-    else
-        set use_cache 0
-    end
-
-    if test "$use_cache" -eq 1
-        cat "$cache_file"
-    else
-        # Rebuild cache
-        set -l results
-        for d in $app_dirs
-            if test -d "$d"
-                for f in "$d"/*.desktop
-                    # Skip NoDisplay=true
-                    if not grep -q "NoDisplay=true" "$f"
-                        set -l stem (string replace -r '\.desktop$' '' (basename "$f"))
-                        set -l name (sed -n '/^Name=/ { s/^Name=//; p; q; }' "$f")
-                        set -l entry "$stem"\t"$name"
-                        if not contains "$entry" $results
-                            set -a results "$entry"
-                        end
-                    end
-                end
-            end
-        end
-        printf "%s\n" $results > "$cache_file"
-        printf "%s\n" $results
-    end
+    set -l cache_file (set -q XDG_CACHE_HOME; and echo "$XDG_CACHE_HOME"; or echo "$HOME/.cache")/open/apps
+    open update-desktop-entry-cache
+    test -f "$cache_file"; or return
+    # Cache format: executable_name\tname_name\tpath
+    awk -F '\t' '{print $1 "\t" $2}' "$cache_file"
 end
 
-# Prefers matching file paths. Only falls back to mimetypes (from the first
-# available system mime list) when there are no matching paths for the token.
+# Prefers matching file paths. Only falls back to mimetypes when there are no
+# matching paths for the token.
 function __fish_open_paths_or_mimes
     set -l token (commandline -ct)
     set -l paths (__fish_complete_path $token)
@@ -58,14 +19,13 @@ function __fish_open_paths_or_mimes
     end
     for f in /etc/mime.types /usr/share/mime/types
         if test -f $f
-            # Print column 1 (the mimetype), skipping comments and blank lines.
             awk '!/^#/ && NF {print $1}' $f
             return
         end
     end
 end
 
-# XXX: The order here is detrimental to its function. The completions with
+# XXX: The order here is critical to its function. The completions with
 # conditions exclude the same options from being suggested again.
 
 # Disable file completion by default so we can control it via logic.
@@ -84,7 +44,7 @@ complete -c open -o a -l application -r -a "(__fish_open_paths_or_mimes)"
 complete -c open -o m -l mimetype -r -a "(__fish_complete_path)"
 
 # -w / --with: next token is a desktop entry
-complete -c open -o w -l with -r -a "(__fish_open_get_apps)"
+complete -c open -o w -l with -r -f -a "(__fish_open_get_apps)"
 
 # Else, paths only.
-complete -c open -n "not __fish_seen_argument -a --application -w --with -m --mimetype" -a "(__fish_complete_path)"
+complete -c open -n "not __fish_seen_argument -s a -l application -s w -l with -s m -l mimetype" -a "(__fish_complete_path)"

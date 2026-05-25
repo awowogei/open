@@ -10,4 +10,5 @@ mime = "0.3.17"
 anyhow = "1.0.102"
 xdg_base_dirs = { version = "2.5.2", package = "xdg" }
 # Needed for https://github.com/ebassi/xdg-mime-rs/pull/30
+# So files with extensions are not counted as x-zerosize
 xdg-mime = { git = "https://github.com/ebassi/xdg-mime-rs", rev = "f8efb3f" }

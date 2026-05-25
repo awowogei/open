@@ -10,7 +10,7 @@ use std::{
 
 use mime::Mime;
 
-use crate::desktop_entry::DesktopEntry;
+use crate::desktop_entry::{DESKTOP_ENTRY_CACHE, DesktopEntry};
 
 pub mod desktop_entry;
 
@@ -41,15 +41,8 @@ pub fn open(paths: Vec<String>) {
         let entry_path = match DesktopEntry::path_from_mimetype(&mime_type) {
             Ok(p) => p,
             Err(e) => {
-                // If an application for the specific mimetype cannot be found, fall back to the
-                // wildcard mimetype, e.g. text/html => text/*
-                let wildcard = format!("{}/*", mime_type.type_()).parse().unwrap();
-                if let Ok(path) = DesktopEntry::path_from_mimetype(&wildcard) {
-                    path
-                } else {
-                    eprintln!("{}", e);
-                    continue;
-                }
+                eprintln!("{}", e);
+                continue;
             }
         };
 
@@ -57,35 +50,34 @@ pub fn open(paths: Vec<String>) {
     }
 
     // Only a single application can consume the terminal window, when one does so, other programs
-    // that need a terminal need to launch their own.
+    // that need a terminal has to launch their own.
     let mut can_consume_terminal = std::io::stdout().is_terminal();
 
     for (entry_path, paths) in to_execute {
         let desktop_entry = match DesktopEntry::load(&entry_path) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!(
-                    "{}",
-                    e.context(format!(
-                        "Could not load desktop entry at {}, error:",
-                        entry_path.display()
-                    ))
-                );
+                eprintln!("{}", e);
                 continue;
             }
         };
-        desktop_entry.execute(paths, &mut can_consume_terminal);
+        desktop_entry.execute(&paths, &mut can_consume_terminal);
     }
 }
 
 /// Set an application as the default for the mimetype.
 /// If the name does not correspond to the file name of a desktop entry, it will try its best to
 /// find the one you're looking for.
-pub fn set_default(application: &str, mime_type: &Mime) {
+pub fn set_default(application: &str, mimetype: &Mime) {
     let desktop_entry = match DesktopEntry::guess_from_name(application) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!(
+                "{}",
+                e.context(format!(
+                    "Could not set the default application for {mimetype} to {application}"
+                ))
+            );
             return;
         }
     };
@@ -95,8 +87,10 @@ pub fn set_default(application: &str, mime_type: &Mime) {
     let mut mime_apps = MimeApps::load();
     mime_apps
         .defaults
-        .insert(mime_type.clone(), vec![desktop_entry_file_name.clone()]);
+        .insert(mimetype.clone(), vec![desktop_entry_file_name.clone()]);
     mime_apps.save();
+
+    println!("{application} set as default application for {mimetype}");
 }
 
 /// Get the mime type of the input
@@ -106,15 +100,22 @@ pub fn get_mime_type(input: impl AsRef<str>) -> Option<Mime> {
 
     let input = input.as_ref();
 
+    // paths can look exactly like mime/type, so do it first
     if Path::new(input).exists() {
-        // paths look exactly like mime/type, so do it first
         let guess = mime_db
             .guess_mime_type()
-            // Don't return application/x-zerosize for empty files
+            // Don't return application/x-zerosize for empty file with extension
             .zero_size(false)
             .path(input)
             .guess();
-        Some(guess.mime_type().clone())
+
+        if *guess.mime_type() == Mime::from_str("application/x-zerosize").unwrap() {
+            // Even if you just "touch new && open new" it should work even though you haven't
+            // defined a handler for x-zerosize.
+            return Mime::from_str("text/plain").ok();
+        } else {
+            return Some(guess.mime_type().clone());
+        };
     } else if let Ok(mime) = input.parse::<Mime>() {
         // just parse what is already in mime/type format
         Some(mime)
@@ -141,7 +142,7 @@ pub fn get_mime_type(input: impl AsRef<str>) -> Option<Mime> {
     }
 }
 
-/// The mime types that have one ore more applications registered as default
+/// The mime types that have one or more applications registered as default
 #[derive(Debug)]
 pub struct MimeApps {
     pub defaults: HashMap<Mime, Vec<String>>,
@@ -263,4 +264,9 @@ impl MimeApps {
             );
         }
     }
+}
+
+pub fn update_completions() {
+    // Triggers lazy loading and writes to the cache file if it's outdated
+    DESKTOP_ENTRY_CACHE.contains_key("");
 }

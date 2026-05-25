@@ -1,31 +1,12 @@
 # bash completion for `open`
 
-# Print desktop entry stems (skipping NoDisplay=true), cached.
-_open_desktop_stems() {
-    local cache="${XDG_CACHE_HOME:-$HOME/.cache}/open/apps-bash"
-    local dirs=(
-        "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-        /usr/local/share/applications
-        /usr/share/applications
-    )
-    local d rebuild=0
-    [[ -f $cache ]] || rebuild=1
-    for d in "${dirs[@]}"; do
-        [[ -d $d && $d -nt $cache ]] && { rebuild=1; break; }
-    done
-    if (( rebuild )); then
-        mkdir -p "${cache%/*}"
-        for d in "${dirs[@]}"; do
-            [[ -d $d ]] || continue
-            for f in "$d"/*.desktop; do
-                [[ -f $f ]] || continue
-                grep -q 'NoDisplay=true' "$f" && continue
-                f=${f##*/}
-                echo "${f%.desktop}"
-            done
-        done | sort -u > "$cache"
-    fi
-    cat "$cache"
+_open_get_apps() {
+    local cache="${XDG_CACHE_HOME:-$HOME/.cache}/open/apps"
+    open update-desktop-entry-cache
+    [[ -f $cache ]] || return
+    # Cache format: executable_name\tprogram_name\tpath
+    # Bash can't display descriptions I think so we only use the executable name
+    awk -F '\t' '{print $1}' "$cache"
 }
 
 _open_completions() {
@@ -33,14 +14,12 @@ _open_completions() {
     local opts="-a --application -w --with -m --mimetype"
     COMPREPLY=()
 
-    # -w/--with takes a desktop entry as its value.
     if [[ $prev == -w || $prev == --with ]]; then
-        COMPREPLY=( $(compgen -W "$(_open_desktop_stems)" -- "$cur") )
+        COMPREPLY=( $(compgen -W "$(_open_get_apps)" -- "$cur") )
         return
     fi
 
-    # Flags. Only one of -a/-w/-m may appear; suppress further flag suggestions
-    # once any is present.
+    # Flags are exclusive
     if [[ $cur == -* ]]; then
         local w
         for w in "${COMP_WORDS[@]:1:COMP_CWORD-1}"; do
@@ -50,8 +29,7 @@ _open_completions() {
         return
     fi
 
-    # Positional INPUT: paths, plus mimetypes when -a or -w is present.
-    # Paths win; only fall back to mimetypes if no path matches the token.
+    # Paths prefered, fall back to mimetypes if no path matches.
     COMPREPLY=( $(compgen -f -- "$cur") )
     if (( ${#COMPREPLY[@]} )); then
         compopt -o filenames 2>/dev/null

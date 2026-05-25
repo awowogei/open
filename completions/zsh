@@ -1,44 +1,20 @@
 #compdef open
 
 _open() {
-    local cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/open/apps-zsh"
-    local -a dirs=(
-        "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-        /usr/share/applications
-        /usr/local/share/applications
-    )
+    local cache_file="${XDG_CACHE_HOME:-$HOME/.cache}/open/apps"
 
-    # Rebuild cache if missing or any source dir is newer.
-    local d rebuild=0
-    [[ -f $cache_file ]] || rebuild=1
-    for d in $dirs; do
-        [[ -d $d && $d -nt $cache_file ]] && { rebuild=1; break; }
-    done
-    if (( rebuild )); then
-        mkdir -p "${cache_file:h}"
-        local -A app_map
-        local f content line stem name
-        for d in $dirs; do
-            [[ -d $d ]] || continue
-            # Doing this with inbuilt zsh stuff seems to be much faster than
-            # outsourcing it.
-            for f in "$d"/*.desktop(N); do
-                content="$(<"$f")"
-                [[ $content == *NoDisplay=true* ]] && continue
+    # Refresh the cache
+    open update-desktop-entry-cache
 
-                stem="${f:t:r}"
-                name=""
-                while IFS= read -r line; do
-                    [[ $line == Name=* ]] && { name="${line#Name=}"; break; }
-                done <<< "$content"
-
-                # Escape colons for _describe compatibility
-                app_map[$stem]="${stem//:/\\:}:${name:-$stem}"
-            done
-        done
-        print -rl -- "${(@v)app_map}" > "$cache_file"
+    local -a desktop_entries=()
+    if [[ -f $cache_file ]]; then
+        local line exec_cmd name
+        while IFS=$'\t' read -r exec_cmd name _; do
+            [[ -z $exec_cmd ]] && continue
+            # Escape colons for _describe compatibility.
+            desktop_entries+=( "${exec_cmd//:/\\:}:${name:-$exec_cmd}" )
+        done < "$cache_file"
     fi
-    local -a desktop_entries=( "${(@f)$(<$cache_file)}" )
 
     local context state state_descr
     local -A opt_args

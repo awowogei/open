@@ -1,5 +1,5 @@
-use clap::Parser;
-use std::process::ExitCode;
+use clap::{Parser, Subcommand};
+use std::{path::Path, process::ExitCode};
 
 use open::desktop_entry::DesktopEntry;
 
@@ -22,8 +22,11 @@ const EXAMPLES: &str = r#"Examples:
 "#;
 
 #[derive(Parser)]
-#[command(about, arg_required_else_help = true, after_help = EXAMPLES)]
+#[command(about, arg_required_else_help = true, subcommand_negates_reqs = true, after_help = EXAMPLES)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Hidden>,
+
     // A list of paths, urls or mimetypes
     #[clap(required = true)]
     inputs: Vec<String>,
@@ -41,8 +44,20 @@ struct Cli {
     get_mime: bool,
 }
 
+#[derive(Subcommand)]
+enum Hidden {
+    // Update the shell completion cache at $XDG_CACHE_HOME/open/apps.
+    #[command(hide = true)]
+    UpdateDesktopEntryCache,
+}
+
 fn main() -> ExitCode {
     let args = Cli::parse();
+
+    if let Some(Hidden::UpdateDesktopEntryCache) = args.command {
+        open::update_completions();
+        return ExitCode::SUCCESS;
+    }
 
     if let Some(application) = args.with {
         for input in &args.inputs {
@@ -52,15 +67,11 @@ fn main() -> ExitCode {
             };
 
             open::set_default(&application, &mimetype);
-            println!(
-                "{} set as default application for {} ({})",
-                application, input, mimetype
-            );
         }
     } else if args.get_application {
         for path in args.inputs {
             let Some(mime_type) = open::get_mime_type(&path) else {
-                eprintln!("'{}' does not exist.", path);
+                eprintln!("'{path}' does not exist.");
                 continue;
             };
             let path = match DesktopEntry::path_from_mimetype(&mime_type) {

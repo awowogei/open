@@ -66,10 +66,8 @@ pub fn open(paths: Vec<String>) {
 }
 
 /// Set an application as the default for the mimetype.
-/// If the name does not correspond to the file name of a desktop entry, it will try its best to
-/// find the one you're looking for.
 pub fn set_default(application: &str, mimetype: &Mime) {
-    let desktop_entry = match DesktopEntry::guess_from_name(application) {
+    let desktop_entry = match DesktopEntry::try_from_name(application) {
         Ok(d) => d,
         Err(e) => {
             eprintln!(
@@ -90,7 +88,10 @@ pub fn set_default(application: &str, mimetype: &Mime) {
         .insert(mimetype.clone(), vec![desktop_entry_file_name.clone()]);
     mime_apps.save();
 
-    println!("{application} set as default application for {mimetype}");
+    println!(
+        "{} set as default application for {mimetype}",
+        &desktop_entry.name
+    );
 }
 
 /// Get the mime type of the input

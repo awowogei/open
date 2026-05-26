@@ -65,7 +65,7 @@ pub struct DesktopEntry {
     pub name: String,
     pub file_name: OsString,
     pub no_display: bool,
-    exec: String,
+    command: String,
     use_terminal: bool,
     categories: HashSet<String>,
 }
@@ -79,7 +79,7 @@ impl DesktopEntry {
         let mut desktop_entry = DesktopEntry {
             name: String::default(),
             file_name: path.file_name().unwrap().to_owned(),
-            exec: String::default(),
+            command: String::default(),
             no_display: false,
             use_terminal: false,
             categories: HashSet::new(),
@@ -93,7 +93,7 @@ impl DesktopEntry {
                 .filter(|attr| attr.len() > 0)
             {
                 match attribute {
-                    "Exec" => desktop_entry.exec = value.to_owned(),
+                    "Exec" => desktop_entry.command = value.to_owned(),
                     "Name" => desktop_entry.name = value.to_owned(),
                     _ => (),
                 }
@@ -166,30 +166,15 @@ impl DesktopEntry {
     }
 
     /// Try to guess an application's desktop entry given its name.
-    pub fn guess_from_name(name: &str) -> anyhow::Result<Self> {
+    pub fn try_from_name(name: &str) -> anyhow::Result<Self> {
         let mut desktop_filename = PathBuf::from(name);
         desktop_filename.set_extension("desktop");
 
-        if let Some(path) =
-            XDG_DIRS.find_data_file(&format!("applications/{}", desktop_filename.display()))
-        {
-            return DesktopEntry::load(path);
-        }
+        let Some(path) = DESKTOP_ENTRY_CACHE.get(name) else {
+            bail!("No desktop entry exists for: {name}");
+        };
 
-        // To make sure we only match against exact matches of commands.
-        for path in XDG_DIRS.list_data_files_once("applications") {
-            let Ok(desktop_entry) = DesktopEntry::load(&path) else {
-                continue;
-            };
-
-            if &name == &desktop_entry.name.to_lowercase()
-                || desktop_entry.executable() == Some(name)
-            {
-                return DesktopEntry::load(path);
-            }
-        }
-
-        bail!("Could not find an application named {}", name);
+        return DesktopEntry::load(path);
     }
 
     // Try to guess an application's desktop entry given an application category.
@@ -211,7 +196,7 @@ impl DesktopEntry {
 
     pub fn execute(&self, input_arguments: &[String], consume_terminal: &mut bool) {
         let mut took_argument = false;
-        let mut components = self.exec.split_whitespace();
+        let mut components = self.command.split_whitespace();
 
         let mut command = if self.use_terminal && !*consume_terminal {
             let Some(terminal) = get_terminal() else {
@@ -225,7 +210,7 @@ impl DesktopEntry {
                 return;
             };
 
-            let mut command = Command::new(&terminal.exec);
+            let mut command = Command::new(&terminal.command);
             // Most(all?) terminals support -e for compatability since xterm had it.
             command.arg("-e");
             command
@@ -277,15 +262,24 @@ impl DesktopEntry {
         }
     }
 
-    pub fn executable(&self) -> Option<&str> {
+    // TODO: Some apps don't use their executable name as the desktop entry file,
+    // e.g. .../com.system76.CosmicFiles.desktop -> executable name: cosmic-files -> desired: cosmic-files
+    // and some use non-standard executable names in their commands,
+    // e.g. .../gimp.desktop -> executable_name: gimp-3.2 -> desired: gimp
+    // So there is seeminly no good way to get the executable name as you would write it in the
+    // terminal...
+    // Opting for extracting it from the command for now as it looks like it yields the best
+    // results.
+    pub fn executable_name(&self) -> Option<&str> {
         let mut substitution_found = false;
-        for component in self.exec.split_whitespace().rev() {
+        for component in self.command.split_whitespace().rev() {
             if !substitution_found && matches!(component, "%f" | "%F" | "%u" | "%U") {
                 substitution_found = true;
                 continue;
             }
             if substitution_found && !component.starts_with("-") {
-                return Some(component.rsplit('/').next().unwrap());
+                let trimmed = component.trim_matches(|c| c == '"' || c == '\'');
+                return Some(trimmed.rsplit('/').next().unwrap());
             }
         }
 
@@ -318,7 +312,7 @@ fn update_desktop_entry_cache() -> HashMap<String, PathBuf> {
         if entry.no_display {
             continue;
         }
-        let Some(executable) = entry.executable() else {
+        let Some(executable) = entry.executable_name() else {
             continue;
         };
 
@@ -361,7 +355,7 @@ fn get_terminal() -> Option<DesktopEntry> {
                 eprintln!(
                     "{:?}",
                     e.context(format!(
-                        "Could not load desktop entry at {}, error:",
+                        "Could not load desktop entry at {}",
                         path.display()
                     ))
                 );
@@ -372,7 +366,7 @@ fn get_terminal() -> Option<DesktopEntry> {
     }
 
     if let Ok(terminal) = std::env::var("TERMINAL") {
-        DesktopEntry::guess_from_name(&terminal).ok()
+        DesktopEntry::try_from_name(&terminal).ok()
     } else {
         DesktopEntry::guess_from_category("TerminalEmulator")
     }

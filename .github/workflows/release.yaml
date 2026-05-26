@@ -21,7 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -30,7 +30,7 @@ jobs:
           target: ${{ matrix.target }}
 
       - name: Cache rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/bin/
@@ -55,7 +55,7 @@ jobs:
           tar -czf ${{ matrix.target }}.tar.gz -C pkg open completions
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}
           path: ${{ matrix.target }}.tar.gz
@@ -68,11 +68,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - run: mkdir artifacts
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 

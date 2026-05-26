@@ -48,7 +48,11 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package artifact
-        run: tar -czf ${{ matrix.target }}.tar.gz -C ./target/${{ matrix.target }}/release open
+        run: |
+          mkdir -p pkg/completions
+          cp ./target/${{ matrix.target }}/release/open pkg/
+          cp -r completions/. pkg/completions/
+          tar -czf ${{ matrix.target }}.tar.gz -C pkg open completions
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

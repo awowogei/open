@@ -1,0 +1,81 @@
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: false
+        default: latest
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+
+      - name: Cache rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            **/target/
+          key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install dependencies
+        if: ${{ matrix.target == 'x86_64-unknown-linux-gnu'}}
+        run: sudo apt-get update && sudo apt-get install -y g++ pkg-config libx11-dev libudev-dev libxkbcommon-x11-0
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package artifact
+        run: tar -czf ${{ matrix.target }}.tar.gz -C ./target/${{ matrix.target }}/release open
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ matrix.target }}.tar.gz
+          retention-days: 1
+
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    name: Create Release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: mkdir artifacts
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "artifacts/*/*"
+          allowUpdates: true
+          removeArtifacts: true
+          tag: ${{ github.event.inputs.tag_name }}

@@ -1,4 +1,4 @@
-A simpler alternative to xdg-open + xdg-mime with support for terminal applications
+A simpler alternative to xdg-open + xdg-mime
 
 ```
 Usage: open [OPTIONS] <INPUTS>...                                                                                                                                                                                                               

@@ -10,7 +10,7 @@ const EXAMPLES: &str = r#"Examples:
 
   Set default application:
     open --with firefox pdf       -- Set default app for a filetype
-    open --with firefox file.html -- Set default app for a file
+    open --with firefox file.html -- Set default app for a filetype
     open --with firefox https://  -- Set default app for a protocol
     open --with nvim text/plain   -- Set default app for a mimetype
     open --with nvim "text/*"     -- Set default app for a mime wildcard
@@ -27,13 +27,16 @@ const EXAMPLES: &str = r#"Examples:
 "#;
 
 #[derive(Parser)]
-#[command(about, arg_required_else_help = true, subcommand_negates_reqs = true, after_help = EXAMPLES)]
+#[command(version, about, arg_required_else_help = true, subcommand_negates_reqs = true, after_help = EXAMPLES, disable_version_flag = true)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Hidden>,
 
-    // A list of paths, urls or mimetypes
-    #[clap(required = true, help = "Paths, urls or mime types")]
+    // To hide the version flag in the help so as to not create noise
+    #[arg(long, short = 'V', hide = true, action = clap::ArgAction::Version)]
+    version: (),
+
+    #[clap(required = true, help = "Paths, urls, mimetypes or filetypes")]
     inputs: Vec<String>,
 
     // Set the default application of the inputs, does not open them

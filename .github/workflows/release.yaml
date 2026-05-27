@@ -76,10 +76,15 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: "artifacts/*"
-          allowUpdates: true
-          removeArtifacts: true
-          tag: ${{ github.event.inputs.tag_name }}
+      - name: Delete last release
+        run: gh release delete latest --yes --cleanup-tag || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release
+        run: |
+          gh release create latest --latest \
+          ./artifacts/*
+
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

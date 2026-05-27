@@ -45,7 +45,7 @@ pub(crate) static DESKTOP_ENTRY_CACHE: LazyLock<HashMap<String, PathBuf>> = Lazy
         for line in content.lines() {
             let mut fields = line.split('\t');
             if let Some(exec) = fields.next()
-                && fields.next().is_some() // name, only used by completions
+                && fields.next().is_some() // program name, only used by completions (mpv Media Player)
                 && let Some(path) = fields.next()
                 && !exec.is_empty()
                 && !path.is_empty()
@@ -165,11 +165,8 @@ impl DesktopEntry {
         }
     }
 
-    /// Try to guess an application's desktop entry given its name.
+    /// Try to get an application's desktop entry given its executable name.
     pub fn try_from_name(name: &str) -> anyhow::Result<Self> {
-        let mut desktop_filename = PathBuf::from(name);
-        desktop_filename.set_extension("desktop");
-
         let Some(path) = DESKTOP_ENTRY_CACHE.get(name) else {
             bail!("No desktop entry exists for: {name}");
         };

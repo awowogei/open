@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 
-use open::desktop_entry::DesktopEntry;
+use open::DesktopEntry;
 
 const EXAMPLES: &str = r#"Examples:
   Open files:
@@ -32,7 +32,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Hidden>,
 
-    // To hide the version flag in the help so as to not create noise
+    // The version flag is only used for package distribution. With disable_version_flag, this hides it from users.
     #[arg(long, short = 'V', hide = true, action = clap::ArgAction::Version)]
     version: (),
 
@@ -90,7 +90,7 @@ fn main() -> ExitCode {
     } else if args.get_application {
         for path in args.inputs {
             let Some(mime_type) = open::get_mime_type(&path) else {
-                eprintln!("'{path}' does not exist.");
+                eprintln!("Could not determine mimetype of '{path}'");
                 continue;
             };
             let path = match DesktopEntry::path_from_mimetype(&mime_type) {
@@ -100,16 +100,21 @@ fn main() -> ExitCode {
                         "{:?}",
                         e.context(format!("Failed to find application for {}", &path))
                     );
-                    // eprintln!(
-                    //     "{}",
-                    //     e.context(format!("Failed to find application for {}, error:", &path))
-                    // );
                     return ExitCode::FAILURE;
                 }
             };
 
             match DesktopEntry::load(&path) {
-                Ok(d) => println!("{}", &d.name),
+                Ok(d) => {
+                    if let Some(exec_name) = d.executable_name() {
+                        println!("{} ({})", exec_name, &d.name);
+                    } else {
+                        eprintln!(
+                            "{} (Invalid application, can't be executed with arguments)",
+                            &d.name
+                        );
+                    }
+                }
                 Err(e) => {
                     eprintln!(
                         "{:?}",

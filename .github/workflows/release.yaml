@@ -79,7 +79,7 @@ jobs:
       - name: Create Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "artifacts/*/*"
+          artifacts: "artifacts/*"
           allowUpdates: true
           removeArtifacts: true
           tag: ${{ github.event.inputs.tag_name }}

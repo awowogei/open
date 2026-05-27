@@ -10,9 +10,11 @@ use std::{
 
 use mime::Mime;
 
-use crate::desktop_entry::{DESKTOP_ENTRY_CACHE, DesktopEntry};
+use crate::desktop_entry::DESKTOP_ENTRY_CACHE;
 
-pub mod desktop_entry;
+pub use desktop_entry::DesktopEntry;
+
+mod desktop_entry;
 
 pub const XDG_DIRS: LazyLock<xdg_base_dirs::BaseDirectories> =
     // This can only fail when the home directory is missing
